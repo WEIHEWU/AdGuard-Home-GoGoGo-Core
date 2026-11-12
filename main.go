@@ -1,4 +1,4 @@
-//go:build !next
+//go:build !next && !android_slim
 
 package main
 

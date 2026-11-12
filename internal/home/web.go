@@ -27,7 +27,6 @@ import (
 	"github.com/AdguardTeam/golibs/osutil/executil"
 	"github.com/AdguardTeam/golibs/service"
 	"github.com/NYTimes/gziphandler"
-	"github.com/quic-go/quic-go/http3"
 )
 
 // TODO(a.garipov): Make configurable.
@@ -137,7 +136,7 @@ type httpsServer struct {
 
 	// server3 is the HTTP/3 HTTPS server.  If it is not nil,
 	// [httpsServer.server] must also be non-nil.
-	server3 *http3.Server
+	server3 http3ServerHolder
 
 	// mu protects enabled, and shutdown.  It must not be nil.
 	mu *sync.Mutex
@@ -486,30 +485,6 @@ func (web *webAPI) serveTLS(ctx context.Context) (next bool) {
 	}
 
 	return true
-}
-
-// mustStartHTTP3 initializes and starts HTTP3 server.
-func (web *webAPI) mustStartHTTP3(ctx context.Context, address string) {
-	defer slogutil.RecoverAndExit(ctx, web.logger, osutil.ExitCodeFailure)
-
-	logger := web.baseLogger.With(loggerKeyServer, "http3")
-	hdlr := web.wrapMux(logger)
-
-	web.httpsServer.server3 = &http3.Server{
-		// TODO(a.garipov): See if there is a way to use the error log as
-		// well as timeouts here.
-		Addr:      address,
-		TLSConfig: web.tlsManager.TLSConfig(),
-		Handler:   hdlr,
-	}
-
-	web.logger.DebugContext(ctx, "starting http/3 server")
-	err := web.httpsServer.server3.ListenAndServe()
-	if !errors.Is(err, http.ErrServerClosed) {
-		cleanupAlways(ctx, logger, web.pidFilePath)
-
-		panic(fmt.Errorf("http3: %w", err))
-	}
 }
 
 // startPprof launches the debug and profiling server on the provided port.

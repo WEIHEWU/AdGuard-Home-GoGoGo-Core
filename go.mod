@@ -13,7 +13,6 @@ require (
 	github.com/digineo/go-ipset/v2 v2.2.1
 	github.com/florianl/go-nfqueue/v2 v2.1.0
 	github.com/fsnotify/fsnotify v1.10.1
-	github.com/google/go-cmp v0.7.0
 	github.com/google/renameio/v2 v2.0.2
 	github.com/google/uuid v1.6.0
 	// TODO(e.burkov):  Get rid of this dependency.  At least, don't update
@@ -54,6 +53,7 @@ require (
 	github.com/go-logr/logr v1.4.4 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/golangci/misspell v0.8.0 // indirect
+	github.com/google/go-cmp v0.7.0 // indirect
 	github.com/google/s2a-go v0.1.10 // indirect
 	github.com/google/yamlfmt v0.21.0 // indirect
 	github.com/googleapis/enterprise-certificate-proxy v0.3.22 // indirect
@@ -67,7 +67,6 @@ require (
 	github.com/mdlayher/socket v0.7.0 // indirect
 	github.com/mitchellh/mapstructure v1.5.0 // indirect
 	github.com/openai/openai-go/v3 v3.68.0 // indirect
-	github.com/patrickmn/go-cache v2.1.0+incompatible // indirect
 	github.com/pb33f/go-yaml v0.1.1 // indirect
 	github.com/pb33f/ordered-map/v2 v2.3.2 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
@@ -98,7 +97,6 @@ require (
 	golang.org/x/text v0.42.0 // indirect
 	golang.org/x/tools v0.50.0 // indirect
 	golang.org/x/vuln v1.8.0 // indirect
-	gonum.org/v1/gonum v0.17.0 // indirect
 	google.golang.org/api v0.299.0 // indirect
 	google.golang.org/genai v1.71.0 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260928230214-8a89bd6388cc // indirect
@@ -147,3 +145,5 @@ tool (
 // TODO(e.burkov):  Remove the replace once v0.8.2 and the fix for
 // https://github.com/dominikh/go-tools/issues/1748 are shipped.
 replace honnef.co/go/tools v0.8.1 => honnef.co/go/tools v0.7.0-0.dev.0.20260824195211-6cb65e58a558
+
+replace github.com/AdguardTeam/dnsproxy => ./third_party/dnsproxy

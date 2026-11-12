@@ -1,3 +1,5 @@
+//go:build !android_slim
+
 package home
 
 import (

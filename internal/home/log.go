@@ -15,7 +15,6 @@ import (
 	"github.com/AdguardTeam/golibs/log"
 	"github.com/AdguardTeam/golibs/logutil/slogutil"
 	yaml "go.yaml.in/yaml/v4"
-	"gopkg.in/natefinch/lumberjack.v2"
 )
 
 // configSyslog is used to indicate that syslog or eventlog (win) should be used
@@ -158,16 +157,7 @@ func configureLogger(ls *logSettings, workDir string) (err error) {
 		logFilePath = filepath.Join(workDir, logFilePath)
 	}
 
-	log.SetOutput(&lumberjack.Logger{
-		Filename:   logFilePath,
-		Compress:   ls.compress,
-		LocalTime:  ls.localTime,
-		MaxBackups: ls.maxBackups,
-		MaxSize:    ls.maxSize,
-		MaxAge:     ls.maxAge,
-	})
-
-	return err
+	return setFileLogger(ls, logFilePath)
 }
 
 // Default log constants.

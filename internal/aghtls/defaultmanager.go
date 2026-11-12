@@ -22,7 +22,6 @@ import (
 	"github.com/AdguardTeam/golibs/errors"
 	"github.com/AdguardTeam/golibs/logutil/slogutil"
 	"github.com/c2h5oh/datasize"
-	"github.com/google/go-cmp/cmp"
 )
 
 // DefaultManagerConfig is the configuration structure for [NewDefaultManager].
@@ -531,8 +530,7 @@ func setPrivateFieldsAndCompare(
 	newTLSConf.DNSCryptConfigFile = currentTLSConf.DNSCryptConfigFile
 	newTLSConf.PortDNSCrypt = currentTLSConf.PortDNSCrypt
 
-	// TODO(a.garipov): Define a custom comparer.
-	return cmp.Equal(currentTLSConf, newTLSConf)
+	return currentTLSConf.equal(newTLSConf)
 }
 
 // setCertFileTime sets [tlsManager.certLastMod] from the certificate.  If there

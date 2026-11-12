@@ -1,3 +1,5 @@
+//go:build !android_slim
+
 // Package updater provides an updater for AdGuardHome.
 package updater
 

@@ -23,7 +23,6 @@ import (
 	"github.com/AdguardTeam/golibs/errors"
 	"github.com/AdguardTeam/golibs/logutil/slogutil"
 	"github.com/AdguardTeam/golibs/osutil/executil"
-	"github.com/quic-go/quic-go/http3"
 )
 
 // getAddrsResponse is the response for /install/get_addresses endpoint.
@@ -410,29 +409,6 @@ func shutdownSrv(ctx context.Context, l *slog.Logger, srv *http.Server) {
 	}
 
 	l.Log(ctx, lvl, "shutting down http server", "addr", srv.Addr, slogutil.KeyError, err)
-}
-
-// shutdownSrv3 shuts down srv and logs the error, if any.  l must not be nil.
-//
-// TODO(a.garipov): Think of a good way to merge with [shutdownSrv].
-func shutdownSrv3(ctx context.Context, l *slog.Logger, srv *http3.Server) {
-	defer slogutil.RecoverAndLog(ctx, l)
-
-	if srv == nil {
-		return
-	}
-
-	err := srv.Close()
-	if err == nil {
-		return
-	}
-
-	lvl := slog.LevelDebug
-	if !errors.Is(err, context.Canceled) {
-		lvl = slog.LevelError
-	}
-
-	l.Log(ctx, lvl, "shutting down http/3 server", "addr", srv.Addr, slogutil.KeyError, err)
 }
 
 // PasswordMinRunes is the minimum length of user's password in runes.

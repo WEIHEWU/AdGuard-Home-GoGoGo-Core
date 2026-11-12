@@ -25,19 +25,16 @@ import (
 	"github.com/AdguardTeam/AdGuardHome/internal/aghhttp"
 	"github.com/AdguardTeam/AdGuardHome/internal/aghnet"
 	"github.com/AdguardTeam/AdGuardHome/internal/aghos"
-	"github.com/AdguardTeam/AdGuardHome/internal/aghslog"
 	"github.com/AdguardTeam/AdGuardHome/internal/aghtls"
 	"github.com/AdguardTeam/AdGuardHome/internal/arpdb"
 	"github.com/AdguardTeam/AdGuardHome/internal/dnsforward"
 	"github.com/AdguardTeam/AdGuardHome/internal/filtering"
-	"github.com/AdguardTeam/AdGuardHome/internal/filtering/hashprefix"
 	"github.com/AdguardTeam/AdGuardHome/internal/permcheck"
 	"github.com/AdguardTeam/AdGuardHome/internal/querylog"
 	"github.com/AdguardTeam/AdGuardHome/internal/snifilter"
 	"github.com/AdguardTeam/AdGuardHome/internal/stats"
 	"github.com/AdguardTeam/AdGuardHome/internal/updater"
 	"github.com/AdguardTeam/AdGuardHome/internal/version"
-	"github.com/AdguardTeam/dnsproxy/upstream"
 	"github.com/AdguardTeam/golibs/errors"
 	"github.com/AdguardTeam/golibs/hostsfile"
 	"github.com/AdguardTeam/golibs/logutil/slogutil"
@@ -441,18 +438,6 @@ func setupDNSFilteringConf(
 	workDir string,
 	hc *aghnet.HostsContainer,
 ) (err error) {
-	const (
-		dnsTimeout = 3 * time.Second
-
-		sbService                 = "safe_browsing"
-		defaultSafeBrowsingServer = `https://family.adguard-dns.com/dns-query`
-		sbTXTSuffix               = `sb.dns.adguard.com.`
-
-		pcService             = "parental_control"
-		defaultParentalServer = `https://family.adguard-dns.com/dns-query`
-		pcTXTSuffix           = `pc.dns.adguard.com.`
-	)
-
 	conf.Logger = baseLogger.With(slogutil.KeyPrefix, "filtering")
 
 	// TODO(s.chzhen):  Use empty interface.
@@ -468,82 +453,7 @@ func setupDNSFilteringConf(
 	conf.UserRules = slices.Clone(config.UserRules)
 	conf.HTTPClient = httpClient(tlsMgr)
 
-	cacheTime := time.Duration(conf.CacheTime) * time.Minute
-
-	upsOpts := &upstream.Options{
-		Logger:  aghslog.NewForUpstream(baseLogger, aghslog.UpstreamTypeService),
-		Timeout: dnsTimeout,
-		Bootstrap: upstream.StaticResolver{
-			// 94.140.14.15.
-			netip.AddrFrom4([4]byte{94, 140, 14, 15}),
-			// 94.140.14.16.
-			netip.AddrFrom4([4]byte{94, 140, 14, 16}),
-			// 2a10:50c0::bad1:ff.
-			netip.AddrFrom16([16]byte{42, 16, 80, 192, 12: 186, 209, 0, 255}),
-			// 2a10:50c0::bad2:ff.
-			netip.AddrFrom16([16]byte{42, 16, 80, 192, 12: 186, 210, 0, 255}),
-		},
-	}
-
-	sbUps, err := upstream.AddressToUpstream(defaultSafeBrowsingServer, upsOpts)
-	if err != nil {
-		return fmt.Errorf("converting safe browsing server: %w", err)
-	}
-
-	conf.SafeBrowsingChecker = hashprefix.New(&hashprefix.Config{
-		Logger:    baseLogger.With(slogutil.KeyPrefix, sbService),
-		Upstream:  sbUps,
-		TXTSuffix: sbTXTSuffix,
-		CacheTime: cacheTime,
-		CacheSize: conf.SafeBrowsingCacheSize,
-	})
-
-	// Protect against invalid configuration, see #6181.
-	//
-	// TODO(a.garipov): Validate against an empty host instead of setting it to
-	// default.
-	if conf.SafeBrowsingBlockHost == "" {
-		host := defaultSafeBrowsingBlockHost
-		baseLogger.WarnContext(
-			ctx,
-			"empty blocking host; set default",
-			"service", sbService,
-			"host", host,
-		)
-
-		conf.SafeBrowsingBlockHost = host
-	}
-
-	parUps, err := upstream.AddressToUpstream(defaultParentalServer, upsOpts)
-	if err != nil {
-		return fmt.Errorf("converting parental server: %w", err)
-	}
-
-	conf.ParentalControlChecker = hashprefix.New(&hashprefix.Config{
-		Logger:    baseLogger.With(slogutil.KeyPrefix, pcService),
-		Upstream:  parUps,
-		TXTSuffix: pcTXTSuffix,
-		CacheTime: cacheTime,
-		CacheSize: conf.ParentalCacheSize,
-	})
-
-	// Protect against invalid configuration, see #6181.
-	//
-	// TODO(a.garipov): Validate against an empty host instead of setting it to
-	// default.
-	if conf.ParentalBlockHost == "" {
-		host := defaultParentalBlockHost
-		baseLogger.WarnContext(
-			ctx,
-			"empty blocking host; set default",
-			"service", pcService,
-			"host", host,
-		)
-
-		conf.ParentalBlockHost = host
-	}
-
-	return nil
+	return setupCloudFilteringCheckers(ctx, baseLogger, conf)
 }
 
 // checkPorts is a helper for ports validation in config.
@@ -572,46 +482,6 @@ func checkPorts() (err error) {
 	}
 
 	return nil
-}
-
-// isUpdateEnabled returns true if the update is enabled for current
-// configuration.  It also logs the decision.  isCustomURL should be true if the
-// updater is using a custom URL.
-func isUpdateEnabled(
-	ctx context.Context,
-	l *slog.Logger,
-	opts *options,
-	isCustomURL bool,
-) (ok bool) {
-	if opts.disableUpdate {
-		l.DebugContext(ctx, "updates are disabled by command-line option")
-
-		return false
-	}
-
-	if isCustomURL {
-		l.DebugContext(ctx, "updates are enabled because custom url is used")
-
-		return true
-	}
-
-	// The mod keeps its own version announcement file in the repository, see
-	// [updater.DefaultVersionURL].  Only the platform the mod actually
-	// publishes has an entry in it.
-	if runtime.GOOS != "linux" || runtime.GOARCH != "arm64" {
-		l.DebugContext(
-			ctx,
-			"updates are disabled for this platform",
-			"goos", runtime.GOOS,
-			"goarch", runtime.GOARCH,
-		)
-
-		return false
-	}
-
-	l.DebugContext(ctx, "updates are enabled for the mod builds")
-
-	return true
 }
 
 // webConfig is a configuration structure for webAPI.

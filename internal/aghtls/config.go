@@ -1,6 +1,7 @@
 package aghtls
 
 import (
+	"bytes"
 	"slices"
 	"time"
 )
@@ -93,6 +94,49 @@ func (c *ExtendedTLSConfig) Clone() (clone *ExtendedTLSConfig) {
 	clone.Status.DNSNames = slices.Clone(c.Status.DNSNames)
 
 	return clone
+}
+
+// equal returns true if c and o contain identical ExtendedTLSConfig values.
+func (c *ExtendedTLSConfig) equal(o *ExtendedTLSConfig) (ok bool) {
+	if c == o {
+		return true
+	}
+	if c == nil || o == nil {
+		return false
+	}
+
+	return c.PrivateKeyPath == o.PrivateKeyPath &&
+		c.PrivateKey == o.PrivateKey &&
+		c.ServerName == o.ServerName &&
+		c.DNSCryptConfigFile == o.DNSCryptConfigFile &&
+		c.CertificatePath == o.CertificatePath &&
+		c.CertificateChain == o.CertificateChain &&
+		slices.Equal(c.OverrideTLSCiphers, o.OverrideTLSCiphers) &&
+		bytes.Equal(c.CertificateChainData, o.CertificateChainData) &&
+		bytes.Equal(c.PrivateKeyData, o.PrivateKeyData) &&
+		c.Status.equal(&o.Status) &&
+		c.PortDNSCrypt == o.PortDNSCrypt &&
+		c.PortDNSOverQUIC == o.PortDNSOverQUIC &&
+		c.PortDNSOverTLS == o.PortDNSOverTLS &&
+		c.PortHTTPS == o.PortHTTPS &&
+		c.Enabled == o.Enabled &&
+		c.ForceHTTPS == o.ForceHTTPS &&
+		c.StrictSNICheck == o.StrictSNICheck &&
+		c.ServePlainDNS == o.ServePlainDNS
+}
+
+func (s *TLSConfigStatus) equal(o *TLSConfigStatus) (ok bool) {
+	return s.Subject == o.Subject &&
+		s.Issuer == o.Issuer &&
+		s.KeyType == o.KeyType &&
+		s.NotBefore.Equal(o.NotBefore) &&
+		s.NotAfter.Equal(o.NotAfter) &&
+		s.WarningValidation == o.WarningValidation &&
+		slices.Equal(s.DNSNames, o.DNSNames) &&
+		s.ValidCert == o.ValidCert &&
+		s.ValidChain == o.ValidChain &&
+		s.ValidKey == o.ValidKey &&
+		s.ValidPair == o.ValidPair
 }
 
 // UsesPrivilegedPorts returns true if the extended TLS configuration use

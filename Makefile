@@ -106,15 +106,17 @@ js-test:      ; $(NPM) $(NPM_FLAGS) run test
 js-test-e2e:  ; $(NPM) $(NPM_FLAGS) run test:e2e
 
 # TODO(a.garipov): Think about making RACE='1' the default for all targets.
-.PHONY: go-bench go-build go-deps go-env go-fuzz go-lint go-test go-upd-tools
-go-bench:     ; $(ENV)          "$(SHELL)"    ./scripts/make/go-bench.sh
-go-build:     ; $(ENV)          "$(SHELL)"    ./scripts/make/go-build.sh
-go-deps:      ; $(ENV)          "$(SHELL)"    ./scripts/make/go-deps.sh
-go-env:       ; $(ENV)          "$(GO.MACRO)" env
-go-fuzz:      ; $(ENV)          "$(SHELL)"    ./scripts/make/go-fuzz.sh
-go-lint:      ; $(ENV)          "$(SHELL)"    ./scripts/make/go-lint.sh
-go-test:      ; $(ENV) RACE='1' "$(SHELL)"    ./scripts/make/go-test.sh
-go-upd-tools: ; $(ENV)          "$(SHELL)"    ./scripts/make/go-upd-tools.sh
+.PHONY: go-bench go-build go-build-android go-build-android-sni go-deps go-env go-fuzz go-lint go-test go-upd-tools
+go-bench:             ; $(ENV)          "$(SHELL)"    ./scripts/make/go-bench.sh
+go-build:             ; $(ENV)          "$(SHELL)"    ./scripts/make/go-build.sh
+go-build-android:     ; $(ENV) CHANNEL='release' BUILD_TAGS='android_slim,nosni,netgo,osusergo' "$(SHELL)" ./scripts/make/go-build-android.sh
+go-build-android-sni: ; $(ENV) CHANNEL='release' BUILD_TAGS='android_slim,netgo,osusergo'       "$(SHELL)" ./scripts/make/go-build-android.sh
+go-deps:              ; $(ENV)          "$(SHELL)"    ./scripts/make/go-deps.sh
+go-env:               ; $(ENV)          "$(GO.MACRO)" env
+go-fuzz:              ; $(ENV)          "$(SHELL)"    ./scripts/make/go-fuzz.sh
+go-lint:              ; $(ENV)          "$(SHELL)"    ./scripts/make/go-lint.sh
+go-test:              ; $(ENV) RACE='1' "$(SHELL)"    ./scripts/make/go-test.sh
+go-upd-tools:         ; $(ENV)          "$(SHELL)"    ./scripts/make/go-upd-tools.sh
 
 .PHONY: go-check
 go-check: go-lint go-test
@@ -123,8 +125,10 @@ go-check: go-lint go-test
 # typechecked and built successfully.
 .PHONY: go-os-check
 go-os-check:
-	$(ENV) GOARCH='amd64' GOOS='linux' "$(GO.MACRO)" vet ./...
-	$(ENV) GOARCH='arm64' GOOS='linux' "$(GO.MACRO)" vet ./...
+	$(ENV) GOARCH='amd64' GOOS='linux' "$(GO.MACRO)" vet .
+	$(ENV) GOARCH='arm64' GOOS='linux' "$(GO.MACRO)" vet .
+	$(ENV) GOARCH='arm64' GOOS='linux' "$(GO.MACRO)" vet -tags='android_slim,nosni,netgo,osusergo' .
+	$(ENV) GOARCH='arm64' GOOS='linux' "$(GO.MACRO)" vet -tags='android_slim,netgo,osusergo' .
 
 .PHONY: txt-lint
 txt-lint: ; $(ENV) "$(SHELL)" ./scripts/make/txt-lint.sh

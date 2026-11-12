@@ -17,15 +17,22 @@ func rootCAs(ctx context.Context, l *slog.Logger) (roots *x509.CertPool) {
 	// Directories with the system root certificates, which aren't supported by
 	// Go's crypto/x509.
 	dirs := []string{
+		// Android 14+ Conscrypt Mainline APEX and Android system root CAs.
+		"/apex/com.android.conscrypt/cacerts",
+		"/system/etc/security/cacerts",
 		// Entware.
 		"/opt/etc/ssl/certs",
 	}
 
 	roots = x509.NewCertPool()
+	var addedAny bool
 	for _, dir := range dirs {
 		if addCertsFromDir(ctx, l, roots, dir) {
-			return roots
+			addedAny = true
 		}
+	}
+	if addedAny {
+		return roots
 	}
 
 	return nil

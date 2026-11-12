@@ -2,9 +2,9 @@
 
 # AdGuard-Home-GoGoGo-Core Dedicated Android ARM64 Build Script
 #
-# Default Profile (Profile B — 100% Pure DNS Firewall):
+# Default Profile (Full-Strength DNS + NFQUEUE SNI Slim Firewall):
 #   GOOS=linux GOARCH=arm64 GOARM64=v8.2 CGO_ENABLED=0
-#   -tags="android_slim,nosni,netgo,osusergo"
+#   -tags="android_slim,netgo,osusergo"
 #   -trimpath -buildvcs=false -ldflags="-s -w -buildid= ..."
 
 verbose="${VERBOSE:-0}"
@@ -74,7 +74,7 @@ if [ "$GOARCH" = 'arm64' ]; then
 	export GOARM64
 fi
 
-build_tags="${BUILD_TAGS:-android_slim,nosni,netgo,osusergo}"
+build_tags="${BUILD_TAGS:-android_slim,netgo,osusergo}"
 readonly build_tags
 
 "$go" build \

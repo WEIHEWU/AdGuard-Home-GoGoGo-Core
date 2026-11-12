@@ -390,9 +390,8 @@ const (
 )
 
 // defaultSNIQueueNum is the default number of the NFQUEUE queue used to
-// inspect the TLS connections.  It must not be zero, as the zero queue is
-// often used by other software.
-const defaultSNIQueueNum uint16 = 7
+// inspect the TLS connections (aligned with AGH_SNI --queue-num 0).
+const defaultSNIQueueNum uint16 = 0
 
 // config is the global configuration structure.
 //

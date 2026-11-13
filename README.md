@@ -32,10 +32,10 @@
 环境要求：**Go `1.27+`**（无需安装 Node.js / npm）。
 
 ```sh
-# 1. 默认构建（推荐）：最强满血档位 — DNS + NFQUEUE SNI 双引擎瘦身版（android_slim,netgo,osusergo + GOARM64=v8.2）
+# 1. 默认构建（推荐）：最强满血档位 — DNS + NFQUEUE SNI 双引擎瘦身版（android_slim + GOARM64=v8.2）
 make go-build-android
 
-# 2. 可选构建：极简纯 DNS 防火墙档位（android_slim,nosni,netgo,osusergo + GOARM64=v8.2）
+# 2. 可选构建：极简纯 DNS 防火墙档位（android_slim,nosni + GOARM64=v8.2）
 make go-build-android-nosni
 
 # 3. 跨架构静态类型与构建标签完整性检查

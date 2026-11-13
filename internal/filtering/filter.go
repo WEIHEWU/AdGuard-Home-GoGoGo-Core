@@ -12,6 +12,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/AdguardTeam/AdGuardHome/internal/aghos"
@@ -338,13 +339,33 @@ func (d *DNSFilter) updateFilterList(
 	ctx context.Context,
 	updateFilters []FilterYAML,
 ) (failNum int, updateFlags []bool) {
+	updateFlags = make([]bool, len(updateFilters))
+	errs := make([]error, len(updateFilters))
+
+	sem := make(chan struct{}, 4)
+	var wg sync.WaitGroup
 	for i := range updateFilters {
-		uf := &updateFilters[i]
-		updated, err := d.update(uf)
-		updateFlags = append(updateFlags, updated)
+		wg.Add(1)
+		go func(idx int) {
+			defer wg.Done()
+			sem <- struct{}{}
+			defer func() { <-sem }()
+
+			uf := &updateFilters[idx]
+			updateFlags[idx], errs[idx] = d.update(uf)
+		}(i)
+	}
+	wg.Wait()
+
+	for i, err := range errs {
 		if err != nil {
 			failNum++
-			d.logger.ErrorContext(ctx, "updating filter", "url", uf.URL, slogutil.KeyError, err)
+			d.logger.ErrorContext(
+				ctx,
+				"updating filter",
+				"url", updateFilters[i].URL,
+				slogutil.KeyError, err,
+			)
 		}
 	}
 
@@ -531,7 +552,15 @@ func (d *DNSFilter) readFromHTTP(
 	tmpFile aghrenameio.PendingFile,
 	urlStr string,
 ) (res *rulelist.ParseResult, err error) {
-	resp, err := d.conf.HTTPClient.Get(urlStr)
+	reqCtx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(reqCtx, http.MethodGet, urlStr, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	resp, err := d.conf.HTTPClient.Do(req)
 	if err != nil {
 		// Don't wrap the error because it's informative enough as is.
 		return nil, err

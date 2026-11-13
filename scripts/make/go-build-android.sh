@@ -4,7 +4,7 @@
 #
 # Default Profile (Full-Strength DNS + NFQUEUE SNI Slim Firewall):
 #   GOOS=linux GOARCH=arm64 GOARM64=v8.2 CGO_ENABLED=0
-#   -tags="android_slim,netgo,osusergo"
+#   -tags="android_slim"
 #   -trimpath -buildvcs=false -ldflags="-s -w -buildid= ..."
 
 verbose="${VERBOSE:-0}"
@@ -74,7 +74,7 @@ if [ "$GOARCH" = 'arm64' ]; then
 	export GOARM64
 fi
 
-build_tags="${BUILD_TAGS:-android_slim,netgo,osusergo}"
+build_tags="${BUILD_TAGS:-android_slim}"
 readonly build_tags
 
 "$go" build \

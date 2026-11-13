@@ -539,6 +539,27 @@ func startDNSServer(ctx context.Context) (err error) {
 		return fmt.Errorf("starting dns server: %w", err)
 	}
 
+	// Point Go's default resolver loopback port-53 fallback directly to our
+	// active local DNS listener so Android (no /etc/resolv.conf) never stalls
+	// on 127.0.0.1:53 / [::1]:53.
+	if dnsPort := config.DNS.Port; dnsPort != 0 {
+		localDNSAddr := netip.AddrPortFrom(
+			netip.AddrFrom4([4]byte{127, 0, 0, 1}),
+			dnsPort,
+		).String()
+		net.DefaultResolver = &net.Resolver{
+			PreferGo: true,
+			Dial: func(dialCtx context.Context, network, address string) (net.Conn, error) {
+				if address == "127.0.0.1:53" || address == "[::1]:53" {
+					address = localDNSAddr
+				}
+				d := net.Dialer{Timeout: 5 * time.Second}
+
+				return d.DialContext(dialCtx, network, address)
+			},
+		}
+	}
+
 	globalContext.filters.Start()
 	globalContext.stats.Start()
 

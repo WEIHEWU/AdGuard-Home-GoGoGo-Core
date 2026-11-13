@@ -117,5 +117,5 @@ jobs:
           body: |
             专为 [AdGuard-Home-GoGoGo](https://github.com/WEIHEWU/AdGuard-Home-GoGoGo) Android Root 模块深度裁剪构建的满血 DNS + NFQUEUE SNI 防火墙核心（`linux/arm64`, `GOARM64=v8.2`, `CGO_ENABLED=0`）。
 
-            - **编译档位**：`-tags="android_slim,netgo,osusergo"`（完整支持 NFQUEUE SNI 监听与 TLS ClientHello 阻断，同时保留零前端体积、零磁盘数据库写入、零后台轮询唤醒）
+            - **编译档位**：`-tags="android_slim"`（完整支持 NFQUEUE SNI 监听与 TLS ClientHello 阻断，同时保留零前端体积、零磁盘数据库写入、零后台轮询唤醒）
             - **完全兼容**：100% 兼容 `AdGuardHome.yaml` (`schema_version: 34`) 与 [AdGuard-Home-GoGoGo Manager](https://github.com/WEIHEWU/AdGuard-Home-GoGoGo-Manager) `/control/*` 控制接口。

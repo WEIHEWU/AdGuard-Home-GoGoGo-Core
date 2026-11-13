@@ -24,8 +24,9 @@ func (s *Server) DialContext(ctx context.Context, network, addr string) (conn ne
 	}
 
 	dialer := &net.Dialer{
-		// TODO(a.garipov): Consider making configurable.
-		Timeout: time.Minute * 5,
+		// Keep per-IP dial timeout concise so unreachable IPv6/CDN endpoints
+		// fail over to the next resolved IP in seconds instead of hanging.
+		Timeout: 8 * time.Second,
 	}
 
 	if netutil.IsValidIPString(host) {

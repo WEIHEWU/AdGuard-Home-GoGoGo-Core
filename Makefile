@@ -109,9 +109,9 @@ js-test-e2e:  ; $(NPM) $(NPM_FLAGS) run test:e2e
 .PHONY: go-bench go-build go-build-android go-build-android-sni go-build-android-nosni go-deps go-env go-fuzz go-lint go-test go-upd-tools
 go-bench:               ; $(ENV)          "$(SHELL)"    ./scripts/make/go-bench.sh
 go-build:               ; $(ENV)          "$(SHELL)"    ./scripts/make/go-build.sh
-go-build-android:       ; $(ENV) CHANNEL='release' BUILD_TAGS='android_slim,netgo,osusergo'       "$(SHELL)" ./scripts/make/go-build-android.sh
-go-build-android-sni:   ; $(ENV) CHANNEL='release' BUILD_TAGS='android_slim,netgo,osusergo'       "$(SHELL)" ./scripts/make/go-build-android.sh
-go-build-android-nosni: ; $(ENV) CHANNEL='release' BUILD_TAGS='android_slim,nosni,netgo,osusergo' "$(SHELL)" ./scripts/make/go-build-android.sh
+go-build-android:       ; $(ENV) CHANNEL='release' BUILD_TAGS='android_slim'       "$(SHELL)" ./scripts/make/go-build-android.sh
+go-build-android-sni:   ; $(ENV) CHANNEL='release' BUILD_TAGS='android_slim'       "$(SHELL)" ./scripts/make/go-build-android.sh
+go-build-android-nosni: ; $(ENV) CHANNEL='release' BUILD_TAGS='android_slim,nosni' "$(SHELL)" ./scripts/make/go-build-android.sh
 go-deps:              ; $(ENV)          "$(SHELL)"    ./scripts/make/go-deps.sh
 go-env:               ; $(ENV)          "$(GO.MACRO)" env
 go-fuzz:              ; $(ENV)          "$(SHELL)"    ./scripts/make/go-fuzz.sh
@@ -128,8 +128,8 @@ go-check: go-lint go-test
 go-os-check:
 	$(ENV) GOARCH='amd64' GOOS='linux' "$(GO.MACRO)" vet .
 	$(ENV) GOARCH='arm64' GOOS='linux' "$(GO.MACRO)" vet .
-	$(ENV) GOARCH='arm64' GOOS='linux' "$(GO.MACRO)" vet -tags='android_slim,nosni,netgo,osusergo' .
-	$(ENV) GOARCH='arm64' GOOS='linux' "$(GO.MACRO)" vet -tags='android_slim,netgo,osusergo' .
+	$(ENV) GOARCH='arm64' GOOS='linux' "$(GO.MACRO)" vet -tags='android_slim,nosni' .
+	$(ENV) GOARCH='arm64' GOOS='linux' "$(GO.MACRO)" vet -tags='android_slim' .
 
 .PHONY: txt-lint
 txt-lint: ; $(ENV) "$(SHELL)" ./scripts/make/txt-lint.sh

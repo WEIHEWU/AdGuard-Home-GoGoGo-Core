@@ -378,19 +378,24 @@ func (d *DNSFilter) handleFilteringRefresh(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	var ok bool
 	resp := struct {
 		Updated int `json:"updated"`
 	}{}
-	resp.Updated, _, ok = d.tryRefreshFilters(!req.White, req.White, true)
-	if !ok {
+	var isNetErr bool
+	func() {
+		d.refreshLock.Lock()
+		defer d.refreshLock.Unlock()
+
+		resp.Updated, isNetErr = d.refreshFiltersIntl(!req.White, req.White, true)
+	}()
+	if isNetErr {
 		aghhttp.ErrorAndLog(
 			ctx,
 			l,
 			r,
 			w,
-			http.StatusInternalServerError,
-			"filters update procedure is already running",
+			http.StatusBadGateway,
+			"failed to update filter lists due to network error",
 		)
 
 		return

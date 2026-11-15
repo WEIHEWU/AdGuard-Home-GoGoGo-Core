@@ -1,7 +1,9 @@
 package stats
 
 import (
+	"fmt"
 	"testing"
+	"unsafe"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -174,4 +176,91 @@ func TestTopUpstreamsPairs(t *testing.T) {
 			assert.Equal(t, tc.wantAvgTime, gotAvgTime)
 		})
 	}
+}
+
+func TestConvertMapToSlice(t *testing.T) {
+	t.Run("empty", func(t *testing.T) {
+		got := convertMapToSlice(map[string]uint64{}, 5)
+		assert.Empty(t, got)
+		assert.Equal(t, 0, cap(got))
+	})
+
+	t.Run("less_than_limit", func(t *testing.T) {
+		m := map[string]uint64{
+			"b.example": 10,
+			"a.example": 30,
+			"c.example": 20,
+		}
+		got := convertMapToSlice(m, 5)
+		require.Len(t, got, 3)
+		assert.Equal(t, 3, cap(got))
+		assert.Equal(t, []countPair{
+			{Name: "a.example", Count: 30},
+			{Name: "c.example", Count: 20},
+			{Name: "b.example", Count: 10},
+		}, got)
+	})
+
+	t.Run("equal_to_limit", func(t *testing.T) {
+		m := map[string]uint64{
+			"b.example": 10,
+			"a.example": 30,
+			"c.example": 20,
+		}
+		got := convertMapToSlice(m, 3)
+		require.Len(t, got, 3)
+		assert.Equal(t, 3, cap(got))
+		assert.Equal(t, []countPair{
+			{Name: "a.example", Count: 30},
+			{Name: "c.example", Count: 20},
+			{Name: "b.example", Count: 10},
+		}, got)
+	})
+
+	t.Run("greater_than_limit_truncates_and_shrinks_backing_array", func(t *testing.T) {
+		m := make(map[string]uint64, 1000)
+		for i := range 1000 {
+			m[fmt.Sprintf("domain-%04d.example.com", i)] = uint64(i + 1)
+		}
+
+		const limit = 10
+		got := convertMapToSlice(m, limit)
+		require.Len(t, got, limit)
+		// Verify that a fresh backing array of exact capacity was allocated so the
+		// full 1000-element array and its string pointers are not retained.
+		assert.Equal(t, limit, cap(got))
+
+		for i := range limit {
+			wantCount := uint64(1000 - i)
+			assert.Equal(t, wantCount, got[i].Count)
+			assert.Equal(t, fmt.Sprintf("domain-%04d.example.com", 999-i), got[i].Name)
+		}
+	})
+
+	t.Run("ties_preserve_counts_without_extra_tiebreak_rule", func(t *testing.T) {
+		m := map[string]uint64{
+			"tie1.example": 50,
+			"tie2.example": 50,
+			"low.example":  10,
+			"high.example": 100,
+		}
+		got := convertMapToSlice(m, 3)
+		require.Len(t, got, 3)
+		assert.Equal(t, 3, cap(got))
+		assert.Equal(t, countPair{Name: "high.example", Count: 100}, got[0])
+		assert.Equal(t, uint64(50), got[1].Count)
+		assert.Equal(t, uint64(50), got[2].Count)
+		assert.NotEqual(t, got[1].Name, got[2].Name)
+	})
+
+	t.Run("no_extra_copy_when_not_truncated", func(t *testing.T) {
+		m := map[string]uint64{
+			"one.example": 1,
+			"two.example": 2,
+		}
+		got := convertMapToSlice(m, 10)
+		require.Len(t, got, 2)
+		assert.Equal(t, 2, cap(got))
+		assert.NotNil(t, unsafe.SliceData(got))
+	})
 }

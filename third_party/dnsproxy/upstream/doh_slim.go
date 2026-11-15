@@ -133,11 +133,21 @@ func (p *dnsOverHTTPS) Close() (err error) {
 
 	runtime.SetFinalizer(p, nil)
 
-	if p.client != nil && p.transportH2 != nil {
-		p.transportH2.CloseIdleConnections()
-	}
+	p.closeClient()
 
 	return nil
+}
+
+// closeClient closes any idle HTTP/1.1 and HTTP/2 connections held by the
+// current client and transport.  p.clientMu must be locked.
+func (p *dnsOverHTTPS) closeClient() {
+	if p.client != nil {
+		p.client.CloseIdleConnections()
+	}
+
+	if p.transportH2 != nil {
+		p.transportH2.CloseIdleConnections()
+	}
 }
 
 func (p *dnsOverHTTPS) exchangeHTTPS(client *http.Client, req *dns.Msg) (resp *dns.Msg, err error) {
@@ -242,9 +252,9 @@ func (p *dnsOverHTTPS) resetClient(resetErr error) (client *http.Client, err err
 	p.clientMu.Lock()
 	defer p.clientMu.Unlock()
 
-	if p.client != nil && p.transportH2 != nil {
-		p.transportH2.CloseIdleConnections()
-	}
+	p.closeClient()
+	p.client = nil
+	p.transportH2 = nil
 
 	p.logger.Debug("recreating the http client", slogutil.KeyError, resetErr)
 	p.client, err = p.createClient()

@@ -7,6 +7,12 @@ import (
 	"time"
 )
 
+// canFlushToFile indicates whether query log entries can be flushed to disk.
+// In android_slim builds, query logs are kept exclusively in the in-memory
+// RingBuffer, so scheduling a flush goroutine when the buffer is full would
+// only perform useless lock/goroutine churn.
+const canFlushToFile = false
+
 // searchFiles returns empty results in android_slim builds because query log
 // entries are retained exclusively in the bounded in-memory RingBuffer.
 func (l *queryLog) searchFiles(

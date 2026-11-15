@@ -9,8 +9,9 @@
 | 优化维度 | 原版 `AdguardHome-Mod` (`arm64`) | `AdGuard-Home-GoGoGo-Core` (`android_slim`) | 收益 |
 | :--- | :--- | :--- | :--- |
 | **静态二进制体积（无 UPX）** | `22.13 MiB` (`23,199,904 B`) | **`11.75 MiB` (`12,320,892 B`)** | **直降 `46.89%`（减少 `10.88 MiB`，完整内置 NFQUEUE SNI）** |
-| **持久化写盘（UFS/F2FS 磨损）** | `bbolt` `stats.db` + `sessions.db` + `querylog.json` | **0 磁盘写 I/O（100% 纯内存环形窗口）** | 消除后台刷盘唤醒与闪存写入放大 |
-| **后台空转定时器** | `periodicFlush` 每 1 秒唤醒 CPU | **0 秒级轮询（按需惰性按小时滑动）** | 息屏 Doze 深度休眠零干扰 |
+| **持久化写盘（UFS/F2FS 磨损）** | `bbolt` `stats.db` + `sessions.db` + `querylog.json` | **0 磁盘写 I/O（100% 纯内存环形窗口 + 底层数组收缩）** | 消除后台刷盘唤醒、闪存写入放大与旧切片引用滞留 |
+| **后台空转定时器** | `periodicFlush` 每 1 秒唤醒 CPU | **0 秒级轮询（按需惰性按小时滑动 + 会话按需清理）** | 息屏 Doze 深度休眠零干扰 |
+| **DoH 上游连接复用** | 异常响应直接关闭 Body 易触发流重置 | **`io.LimitReader` 排空残余响应体后再关闭** | 提升 HTTP/2 & TLS 连接池复用率，减少握手耗电 |
 | **前端静态资源包** | 内嵌 SolidJS `client_v2`（约 `6 MB`） | **轻量内存引导页（由原生 Flutter Manager 接管）** | 零冗余静态资产驻留 |
 | **NFQUEUE SNI 首包阻断** | 默认队列 `7` | **原生内置 NFQUEUE `0` + TLS `ClientHello` 分片重组阻断** | 精准掐灭 HTTPDNS / 硬编码 IP 直连广告 |
 | **时区与根证书适配** | 嵌入 `408 KB` `time/tzdata`、缺失 Conscrypt 路径 | **直读 Android Bionic `/apex/com.android.tzdata` 与 Conscrypt CA** | 原生兼容 Android 9 ~ 16+ |

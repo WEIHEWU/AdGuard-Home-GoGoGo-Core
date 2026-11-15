@@ -15,6 +15,9 @@ import (
 	"github.com/AdguardTeam/golibs/logutil/slogutil"
 )
 
+// canFlushToFile indicates whether query log entries can be flushed to disk.
+const canFlushToFile = true
+
 // reasonCodes is a set of all valid reason codes.
 var reasonCodes = [...]string{
 	filtering.NotFilteredAllowList: "1",

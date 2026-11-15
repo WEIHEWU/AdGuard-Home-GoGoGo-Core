@@ -200,6 +200,10 @@ func (a countPair) compareCount(b countPair) (res int) {
 }
 
 func convertMapToSlice(m map[string]uint64, maxVal int) (s []countPair) {
+	if maxVal <= 0 || len(m) == 0 {
+		return []countPair{}
+	}
+
 	s = make([]countPair, 0, len(m))
 	for k, v := range m {
 		s = append(s, countPair{Name: k, Count: v})
@@ -207,7 +211,14 @@ func convertMapToSlice(m map[string]uint64, maxVal int) (s []countPair) {
 
 	slices.SortFunc(s, countPair.compareCount)
 
-	return s[:min(maxVal, len(s))]
+	if len(s) <= maxVal {
+		return s
+	}
+
+	res := make([]countPair, maxVal)
+	copy(res, s[:maxVal])
+
+	return res
 }
 
 func convertSliceToMap(a []countPair) (m map[string]uint64) {

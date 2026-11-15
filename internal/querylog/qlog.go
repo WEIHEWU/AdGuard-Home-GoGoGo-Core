@@ -101,7 +101,7 @@ func (l *queryLog) Shutdown(ctx context.Context) (err error) {
 	l.confMu.RLock()
 	defer l.confMu.RUnlock()
 
-	if l.conf.FileEnabled {
+	if canFlushToFile && l.conf.FileEnabled {
 		err = l.flushLogBuffer(ctx)
 		if err != nil {
 			// Don't wrap the error because it's informative enough as is.
@@ -253,7 +253,7 @@ func (l *queryLog) Add(params *AddParams) {
 
 	l.buffer.Push(entry)
 
-	if !l.flushPending && fileIsEnabled && l.buffer.Len() >= memSize {
+	if canFlushToFile && !l.flushPending && fileIsEnabled && l.buffer.Len() >= memSize {
 		l.flushPending = true
 
 		// TODO(s.chzhen):  Fix occasional rewrite of entires.

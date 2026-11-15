@@ -37,15 +37,22 @@ var _ SessionStorage = (*DefaultSessionStorage)(nil)
 
 // New implements the [SessionStorage] interface for *DefaultSessionStorage.
 func (ds *DefaultSessionStorage) New(_ context.Context, u *User) (s *Session, err error) {
+	now := ds.clock.Now()
 	s = &Session{
 		Token:     NewSessionToken(),
 		UserID:    u.ID,
 		UserLogin: u.Login,
-		Expire:    ds.clock.Now().Add(ds.sessionTTL),
+		Expire:    now.Add(ds.sessionTTL),
 	}
 
 	ds.mu.Lock()
 	defer ds.mu.Unlock()
+
+	for t, existing := range ds.sessions {
+		if now.After(existing.Expire) {
+			delete(ds.sessions, t)
+		}
+	}
 
 	ds.sessions[s.Token] = s
 

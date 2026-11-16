@@ -125,13 +125,7 @@ func TestQuerylog_HandleQueryLog_reasonSearchCriterion(t *testing.T) {
 				testSearchAPI(t, l, tc.wantStatus, tc.wantHosts, tc.wantMsg, u)
 			}))
 
-			require.True(t, t.Run("file", func(t *testing.T) {
-				ctx := testutil.ContextWithTimeout(t, testTimeout)
-				err := l.flushLogBuffer(ctx)
-				require.NoError(t, err)
-
-				testSearchAPI(t, l, tc.wantStatus, tc.wantHosts, tc.wantMsg, u)
-			}))
+			runFileSearchSubtestIfSupported(t, l, tc.wantStatus, tc.wantHosts, tc.wantMsg, u)
 		})
 	}
 }

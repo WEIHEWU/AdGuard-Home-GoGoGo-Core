@@ -338,7 +338,8 @@ func (d *DNSFilter) handleFilteringSetURL(w http.ResponseWriter, r *http.Request
 
 // filteringRulesReq is the JSON structure for settings custom filtering rules.
 type filteringRulesReq struct {
-	Rules []string `json:"rules"`
+	Rules            []string `json:"rules"`
+	ExpectedRevision string   `json:"expected_revision,omitempty"`
 }
 
 func (d *DNSFilter) handleFilteringSetRules(w http.ResponseWriter, r *http.Request) {
@@ -356,9 +357,34 @@ func (d *DNSFilter) handleFilteringSetRules(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	d.conf.UserRules = req.Rules
-	d.conf.ConfModifier.Apply(ctx)
+	d.conf.filtersMu.Lock()
+	curRev := d.userRulesRevisionLocked()
+	if req.ExpectedRevision != "" && req.ExpectedRevision != curRev {
+		d.conf.filtersMu.Unlock()
+		aghhttp.ErrorAndLog(
+			ctx,
+			d.logger,
+			r,
+			w,
+			http.StatusConflict,
+			"user rules revision conflict: expected %q, current %q",
+			req.ExpectedRevision,
+			curRev,
+		)
+
+		return
+	}
+	d.conf.UserRules = slices.Clone(req.Rules)
+	d.userRulesEpoch.Add(1)
+	newRev := d.userRulesRevisionLocked()
+	d.conf.filtersMu.Unlock()
+
+	if d.conf.ConfModifier != nil {
+		d.conf.ConfModifier.Apply(ctx)
+	}
 	d.EnableFilters(true)
+
+	w.Header().Set("X-User-Rules-Revision", newRev)
 }
 
 func (d *DNSFilter) handleFilteringRefresh(w http.ResponseWriter, r *http.Request) {
@@ -416,11 +442,12 @@ type filterJSON struct {
 }
 
 type filteringConfig struct {
-	Filters          []filterJSON `json:"filters"`
-	WhitelistFilters []filterJSON `json:"whitelist_filters"`
-	UserRules        []string     `json:"user_rules"`
-	Interval         uint32       `json:"interval"` // in hours
-	Enabled          bool         `json:"enabled"`
+	Filters           []filterJSON `json:"filters"`
+	WhitelistFilters  []filterJSON `json:"whitelist_filters"`
+	UserRules         []string     `json:"user_rules"`
+	UserRulesRevision string       `json:"user_rules_revision,omitempty"`
+	Interval          uint32       `json:"interval"` // in hours
+	Enabled           bool         `json:"enabled"`
 }
 
 func filterToJSON(f FilterYAML) filterJSON {
@@ -455,7 +482,8 @@ func (d *DNSFilter) handleFilteringStatus(w http.ResponseWriter, r *http.Request
 		fj := filterToJSON(f)
 		resp.WhitelistFilters = append(resp.WhitelistFilters, fj)
 	}
-	resp.UserRules = d.conf.UserRules
+	resp.UserRules = slices.Clone(d.conf.UserRules)
+	resp.UserRulesRevision = d.userRulesRevisionLocked()
 	d.conf.filtersMu.RUnlock()
 
 	aghhttp.WriteJSONResponseOK(r.Context(), d.logger, w, r, resp)

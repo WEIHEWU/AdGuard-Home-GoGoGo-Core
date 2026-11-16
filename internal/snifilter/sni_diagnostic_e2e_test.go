@@ -143,6 +143,10 @@ func TestFilter_RealHandshake_QueryLogAndSummary(t *testing.T) {
 	data := blockedResp["data"].([]any)
 	require.Len(t, data, 1, "segmentation, retransmit and RST on same connection must log exactly once")
 
+	// Filter directly by reason=FilteredSNI as well.
+	byReasonResp := queryHTTPJSON(t, getQLog, "/control/querylog?reason=FilteredSNI")
+	require.Len(t, byReasonResp["data"].([]any), 1, "reason=FilteredSNI query must return SNI block")
+
 	entry := data[0].(map[string]any)
 	assert.Equal(t, filtering.FilteredSNI.String(), entry["reason"])
 	assert.Equal(t, "", entry["upstream"])

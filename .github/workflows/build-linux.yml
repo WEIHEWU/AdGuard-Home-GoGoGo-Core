@@ -48,6 +48,11 @@ jobs:
       - name: Vet all build profiles (Android Pure DNS, Android SNI, Standard)
         run: make go-os-check
 
+      - name: Run unit & race tests (Standard & android_slim)
+        run: |
+          go test -race -count=1 ./internal/snifilter/... ./internal/querylog/... ./internal/filtering/...
+          go test -tags='android_slim' -count=1 ./internal/snifilter/... ./internal/querylog/...
+
       - name: Build host amd64 slim binary & verify AdGuardHome.yaml compatibility
         run: |
           #!/bin/sh

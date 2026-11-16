@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/netip"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -492,4 +493,90 @@ func TestDNSFilter_HandleCheckHost(t *testing.T) {
 			assert.Equal(t, tc.want, res)
 		})
 	}
+}
+
+func TestDNSFilter_handleFilteringSetRules_ExpectedRevisionConflictAndCompat(t *testing.T) {
+	confModifier := &aghtest.ConfigModifier{}
+	confModifier.OnApply = func(_ context.Context) {}
+
+	d, err := New(&Config{
+		Logger:           testLogger,
+		FilteringEnabled: true,
+		UserRules:        []string{"! initial comment", "||existing.example^"},
+		ConfModifier:     confModifier,
+		HTTPReg:          aghhttp.EmptyRegistrar{},
+		DataDir:          t.TempDir(),
+	}, nil)
+	require.NoError(t, err)
+	t.Cleanup(d.Close)
+	d.Start()
+
+	readStatus := func() filteringConfig {
+		req := httptest.NewRequest(http.MethodGet, "/control/filtering/status", nil)
+		rw := httptest.NewRecorder()
+		d.handleFilteringStatus(rw, req)
+		require.Equal(t, http.StatusOK, rw.Code)
+
+		var cfg filteringConfig
+		require.NoError(t, json.Unmarshal(rw.Body.Bytes(), &cfg))
+		return cfg
+	}
+
+	postRules := func(body map[string]any) *httptest.ResponseRecorder {
+		raw, marshalErr := json.Marshal(body)
+		require.NoError(t, marshalErr)
+		req := httptest.NewRequest(http.MethodPost, "/control/filtering/set_rules", bytes.NewReader(raw))
+		req.Header.Set("Content-Type", "application/json")
+		rw := httptest.NewRecorder()
+		d.handleFilteringSetRules(rw, req)
+		return rw
+	}
+
+	st0 := readStatus()
+	require.NotEmpty(t, st0.UserRulesRevision)
+	rev0 := st0.UserRulesRevision
+
+	// 1. Legacy client without expected_revision still succeeds cleanly.
+	rwLegacy := postRules(map[string]any{
+		"rules": []string{"! initial comment", "||existing.example^", "||external.example^"},
+	})
+	require.Equal(t, http.StatusOK, rwLegacy.Code)
+	assert.NotEmpty(t, rwLegacy.Header().Get("X-User-Rules-Revision"))
+
+	st1 := readStatus()
+	assert.NotEqual(t, rev0, st1.UserRulesRevision)
+	assert.Contains(t, st1.UserRules, "||external.example^")
+
+	// 2. Stale client holding rev0 gets 409 Conflict; external rule stays intact.
+	rwConflict := postRules(map[string]any{
+		"rules":             []string{"! initial comment", "||existing.example^", "@@||from-stale.example^"},
+		"expected_revision": rev0,
+	})
+	assert.Equal(t, http.StatusConflict, rwConflict.Code)
+	stAfterConflict := readStatus()
+	assert.Equal(t, st1.UserRules, stAfterConflict.UserRules)
+	assert.Equal(t, st1.UserRulesRevision, stAfterConflict.UserRulesRevision)
+
+	// 3. Even if external client deletes and re-adds identical rule list, revision must advance.
+	rwReAdd := postRules(map[string]any{
+		"rules": []string{"! initial comment", "||existing.example^", "||external.example^"},
+	})
+	require.Equal(t, http.StatusOK, rwReAdd.Code)
+	st2 := readStatus()
+	assert.NotEqual(t, st1.UserRulesRevision, st2.UserRulesRevision)
+
+	rwConflict2 := postRules(map[string]any{
+		"rules":             []string{"! initial comment"},
+		"expected_revision": st1.UserRulesRevision,
+	})
+	assert.Equal(t, http.StatusConflict, rwConflict2.Code)
+
+	// 4. Fresh revision succeeds atomically.
+	rwOK := postRules(map[string]any{
+		"rules":             append(slices.Clone(st2.UserRules), "@@||safe.example^"),
+		"expected_revision": st2.UserRulesRevision,
+	})
+	require.Equal(t, http.StatusOK, rwOK.Code)
+	st3 := readStatus()
+	assert.Equal(t, []string{"! initial comment", "||existing.example^", "||external.example^", "@@||safe.example^"}, st3.UserRules)
 }

@@ -1,3 +1,5 @@
+//go:build !android_slim
+
 package querylog
 
 import (
@@ -18,9 +20,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
-
-// Common constants for tests.
-const testTimeout = 1 * time.Second
 
 func TestQueryLog_DecodeLogEntry_success(t *testing.T) {
 	logOutput := &bytes.Buffer{}

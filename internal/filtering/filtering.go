@@ -3,6 +3,7 @@ package filtering
 
 import (
 	"context"
+	"crypto/sha256"
 	"fmt"
 	"io/fs"
 	"log/slog"
@@ -281,6 +282,19 @@ type DNSFilter struct {
 	hostCheckers []hostChecker
 
 	safeFSPatterns []string
+
+	userRulesEpoch atomic.Uint64
+}
+
+// userRulesRevisionLocked computes a deterministic revision token for the
+// current custom user rules slice.  d.conf.filtersMu must be held.
+func (d *DNSFilter) userRulesRevisionLocked() string {
+	h := sha256.New()
+	for _, r := range d.conf.UserRules {
+		_, _ = fmt.Fprintf(h, "%d:%s\n", len(r), r)
+	}
+	sum := h.Sum(nil)
+	return fmt.Sprintf("v1:%d:%x", d.userRulesEpoch.Load(), sum[:12])
 }
 
 // Filter represents a filter list

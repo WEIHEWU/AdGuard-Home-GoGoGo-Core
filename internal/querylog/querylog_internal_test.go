@@ -2,11 +2,15 @@ package querylog
 
 import (
 	"net"
+	"time"
 
 	"github.com/AdguardTeam/AdGuardHome/internal/filtering"
 	"github.com/AdguardTeam/golibs/logutil/slogutil"
 	"github.com/miekg/dns"
 )
+
+// Common constants for tests.
+const testTimeout = 1 * time.Second
 
 var (
 	// testLogger is a common logger for tests.

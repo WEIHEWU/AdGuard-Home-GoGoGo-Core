@@ -577,6 +577,68 @@ func TestDNSFilter_handleFilteringSetRules_ExpectedRevisionConflictAndCompat(t *
 		"expected_revision": st2.UserRulesRevision,
 	})
 	require.Equal(t, http.StatusOK, rwOK.Code)
+	committedRev := rwOK.Header().Get("X-User-Rules-Revision")
+	require.NotEmpty(t, committedRev)
 	st3 := readStatus()
+	assert.Equal(t, committedRev, st3.UserRulesRevision)
 	assert.Equal(t, []string{"! initial comment", "||existing.example^", "||external.example^", "@@||safe.example^"}, st3.UserRules)
+
+	// 5. Simulated Core restart (or second Core instance) with IDENTICAL rules
+	// MUST produce a distinct instance revision and reject old instance revisions.
+	d2, err := New(&Config{
+		Logger:           testLogger,
+		FilteringEnabled: true,
+		UserRules:        slices.Clone(st3.UserRules),
+		ConfModifier:     confModifier,
+		HTTPReg:          aghhttp.EmptyRegistrar{},
+		DataDir:          t.TempDir(),
+	}, nil)
+	require.NoError(t, err)
+	t.Cleanup(d2.Close)
+	d2.Start()
+
+	reqRestartStatus := httptest.NewRequest(http.MethodGet, "/control/filtering/status", nil)
+	rwRestartStatus := httptest.NewRecorder()
+	d2.handleFilteringStatus(rwRestartStatus, reqRestartStatus)
+	require.Equal(t, http.StatusOK, rwRestartStatus.Code)
+	var stRestart filteringConfig
+	require.NoError(t, json.Unmarshal(rwRestartStatus.Body.Bytes(), &stRestart))
+	require.NotEmpty(t, stRestart.UserRulesRevision)
+	assert.NotEqual(t, committedRev, stRestart.UserRulesRevision, "restarted/distinct instance must not reuse old instance revision")
+
+	// Also verify two brand-new instances on identical initial rules have distinct revisions.
+	d3, err := New(&Config{
+		Logger:           testLogger,
+		FilteringEnabled: true,
+		UserRules:        slices.Clone(st3.UserRules),
+		ConfModifier:     confModifier,
+		HTTPReg:          aghhttp.EmptyRegistrar{},
+		DataDir:          t.TempDir(),
+	}, nil)
+	require.NoError(t, err)
+	t.Cleanup(d3.Close)
+	d3.Start()
+	rwStatus3 := httptest.NewRecorder()
+	d3.handleFilteringStatus(rwStatus3, httptest.NewRequest(http.MethodGet, "/control/filtering/status", nil))
+	var stOtherInst filteringConfig
+	require.NoError(t, json.Unmarshal(rwStatus3.Body.Bytes(), &stOtherInst))
+	assert.NotEqual(t, stRestart.UserRulesRevision, stOtherInst.UserRulesRevision)
+
+	// Old instance revision submitted against restarted instance MUST fail 409 and preserve rules.
+	rawOldReq, marshalErr := json.Marshal(map[string]any{
+		"rules":             []string{"! wiped"},
+		"expected_revision": committedRev,
+	})
+	require.NoError(t, marshalErr)
+	reqOld := httptest.NewRequest(http.MethodPost, "/control/filtering/set_rules", bytes.NewReader(rawOldReq))
+	reqOld.Header.Set("Content-Type", "application/json")
+	rwOld := httptest.NewRecorder()
+	d2.handleFilteringSetRules(rwOld, reqOld)
+	assert.Equal(t, http.StatusConflict, rwOld.Code)
+
+	rwVerifyIntact := httptest.NewRecorder()
+	d2.handleFilteringStatus(rwVerifyIntact, httptest.NewRequest(http.MethodGet, "/control/filtering/status", nil))
+	var stIntact filteringConfig
+	require.NoError(t, json.Unmarshal(rwVerifyIntact.Body.Bytes(), &stIntact))
+	assert.Equal(t, st3.UserRules, stIntact.UserRules)
 }

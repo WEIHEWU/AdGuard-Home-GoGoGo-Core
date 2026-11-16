@@ -3,7 +3,9 @@ package filtering
 
 import (
 	"context"
+	"crypto/rand"
 	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"io/fs"
 	"log/slog"
@@ -283,18 +285,37 @@ type DNSFilter struct {
 
 	safeFSPatterns []string
 
-	userRulesEpoch atomic.Uint64
+	userRulesInstanceOnce sync.Once
+	userRulesInstanceID   string
+	userRulesEpoch        atomic.Uint64
 }
 
-// userRulesRevisionLocked computes a deterministic revision token for the
-// current custom user rules slice.  d.conf.filtersMu must be held.
+var userRulesInstanceFallbackSeq atomic.Uint64
+
+func (d *DNSFilter) instanceID() string {
+	d.userRulesInstanceOnce.Do(func() {
+		var buf [12]byte
+		if _, err := rand.Read(buf[:]); err != nil {
+			seq := userRulesInstanceFallbackSeq.Add(1)
+			returnID := fmt.Sprintf("f%016x%08x", uint64(time.Now().UnixNano()), seq)
+			d.userRulesInstanceID = returnID
+			return
+		}
+		d.userRulesInstanceID = hex.EncodeToString(buf[:])
+	})
+	return d.userRulesInstanceID
+}
+
+// userRulesRevisionLocked computes a per-instance, monotonic, content-bound
+// revision token for the current custom user rules slice.  d.conf.filtersMu
+// must be held.
 func (d *DNSFilter) userRulesRevisionLocked() string {
 	h := sha256.New()
 	for _, r := range d.conf.UserRules {
 		_, _ = fmt.Fprintf(h, "%d:%s\n", len(r), r)
 	}
 	sum := h.Sum(nil)
-	return fmt.Sprintf("v1:%d:%x", d.userRulesEpoch.Load(), sum[:12])
+	return fmt.Sprintf("v2:%s:%d:%x", d.instanceID(), d.userRulesEpoch.Load(), sum[:12])
 }
 
 // Filter represents a filter list
@@ -922,6 +943,7 @@ func New(c *Config, blockFilters []Filter) (d *DNSFilter, err error) {
 		applyClientFiltering:   c.ApplyClientFiltering,
 		confMu:                 &sync.RWMutex{},
 	}
+	_ = d.instanceID()
 
 	err = d.validateSafeFSPatterns(c.SafeFSPatterns)
 	if err != nil {

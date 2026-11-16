@@ -124,10 +124,13 @@ func TestFilter_inspect_paused(t *testing.T) {
 	require.NotNil(t, ql.added)
 	assert.Equal(t, serverName+".", ql.added.Question.Question[0].Name)
 
-	// The filtering engine still reports the connection as blocked, and the
-	// query log keeps its verdict, so the entry says what would have happened.
-	assert.True(t, ql.added.Result.IsFiltered)
-	assert.Equal(t, filtering.FilteredSNI, ql.added.Result.Reason)
+	// While protection is paused, the connection is actually allowed: it must
+	// NOT be marked as FilteredSNI / IsFiltered=true in the query log, and
+	// instead records PredictedBlocked=true alongside NotFilteredSNI and rules.
+	assert.False(t, ql.added.Result.IsFiltered)
+	assert.Equal(t, filtering.NotFilteredSNI, ql.added.Result.Reason)
+	assert.True(t, ql.added.PredictedBlocked)
+	assert.NotEmpty(t, ql.added.Result.Rules)
 
 	key := keyOf(t, f, pkt)
 	fl := f.flows[key]

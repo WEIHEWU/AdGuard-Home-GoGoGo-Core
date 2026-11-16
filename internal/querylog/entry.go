@@ -46,6 +46,7 @@ type logEntry struct {
 
 	Cached            bool `json:",omitempty"`
 	AuthenticatedData bool `json:"AD,omitempty"`
+	PredictedBlocked  bool `json:"predicted_blocked,omitempty"`
 }
 
 // shallowClone returns a shallow clone of e.

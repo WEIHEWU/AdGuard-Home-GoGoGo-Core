@@ -40,6 +40,11 @@ type queryLog struct {
 	// be modified.
 	buffer *container.RingBuffer[*logEntry]
 
+	// blockedSummary keeps an independent, bounded in-memory aggregation of
+	// recent actually-blocked events so critical blocks aren't lost when the
+	// raw memory ring is overwritten by noisy retries.
+	blockedSummary *blockedSummary
+
 	// logFile is the path to the log file.
 	logFile string
 
@@ -158,6 +163,9 @@ func (l *queryLog) clear(ctx context.Context) {
 
 		l.buffer.Clear()
 		l.flushPending = false
+		if l.blockedSummary != nil {
+			l.blockedSummary.clear()
+		}
 	}()
 
 	oldLogFile := l.logFile + ".1"
@@ -204,6 +212,7 @@ func newLogEntry(ctx context.Context, logger *slog.Logger, params *AddParams) (e
 
 		Cached:            params.Cached,
 		AuthenticatedData: params.AuthenticatedData,
+		PredictedBlocked:  params.PredictedBlocked,
 	}
 
 	if params.ReqECS != nil {
@@ -247,6 +256,10 @@ func (l *queryLog) Add(params *AddParams) {
 	}
 
 	entry := newLogEntry(ctx, l.logger, params)
+
+	if l.blockedSummary != nil && isBlockedSummaryEntry(entry) {
+		l.blockedSummary.record(entry)
+	}
 
 	l.bufferLock.Lock()
 	defer l.bufferLock.Unlock()

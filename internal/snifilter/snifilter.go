@@ -483,7 +483,7 @@ func (f *Filter) inspect(p *packet) (res inspection) {
 
 		return res
 	}
-	handshake := fl.handshake
+	handshake := slices.Clone(fl.handshake)
 	f.mu.Unlock()
 
 	name, err := sniffSNI(handshake)
@@ -492,14 +492,18 @@ func (f *Filter) inspect(p *packet) (res inspection) {
 		f.counters.sni.Add(1)
 
 		filterRes := f.checkHost(name)
-		blocked := filterRes.IsFiltered
+		wouldBlock := filterRes.IsFiltered
+		actualBlock := wouldBlock && !paused
 
 		// The connection is recorded as accepted while the protection is
-		// paused, so that the rest of its packets stay on the fast path.
-		f.decide(key, blocked && !paused)
-		f.logConnection(p, name, filterRes)
+		// paused, so that the rest of its packets stay on the fast path, and
+		// logConnection receives the actual block verdict rather than the
+		// paused rule prediction.
+		if f.tryDecide(key, actualBlock) {
+			f.logConnectionWithVerdict(p, name, filterRes, actualBlock)
+		}
 
-		if blocked && !paused {
+		if actualBlock {
 			res.verdict = verdictReset
 			res.toClient, res.toServer = resetSegments(p)
 		}
@@ -527,14 +531,25 @@ func (f *Filter) inspect(p *packet) (res inspection) {
 
 // decide stores the verdict for the connection identified by key.
 func (f *Filter) decide(key flowKey, blocked bool) {
+	_ = f.tryDecide(key, blocked)
+}
+
+// tryDecide atomically records the verdict for key if it has not already been
+// decided, returning true only for the caller that performed the transition so
+// duplicate packets/segments can never log the same connection decision twice.
+func (f *Filter) tryDecide(key flowKey, blocked bool) (decidedNow bool) {
 	f.mu.Lock()
+	defer f.mu.Unlock()
+
 	fl := f.flows[key]
-	if fl != nil {
-		fl.decided = true
-		fl.blocked = blocked
-		f.releaseLocked(fl)
+	if fl == nil || fl.decided {
+		return false
 	}
-	f.mu.Unlock()
+	fl.decided = true
+	fl.blocked = blocked
+	f.releaseLocked(fl)
+
+	return true
 }
 
 // newFlowLocked adds the connection identified by key to the table and returns
@@ -781,28 +796,36 @@ func (f *Filter) clearLocked() {
 // admin UI.  res is the result of checking host against the filtering rules,
 // and it must not be nil.
 func (f *Filter) logConnection(p *packet, host string, res *filtering.Result) {
+	f.logConnectionWithVerdict(p, host, res, res.IsFiltered)
+}
+
+func (f *Filter) logConnectionWithVerdict(p *packet, host string, res *filtering.Result, actuallyBlocked bool) {
 	if f.queryLog == nil {
 		return
 	}
 
-	// The modules of AdGuard Home have their own lists of the hosts that
-	// shouldn't be written to the query log, so respect them as well.
-	if !f.queryLog.ShouldLog(host, dns.TypeA, dns.ClassINET, nil) {
+	// Respect both ignored domains and per-client IgnoreQueryLog settings.
+	var ids []string
+	if p.src.Addr().IsValid() {
+		ids = []string{p.src.Addr().String()}
+	}
+	if !f.queryLog.ShouldLog(host, dns.TypeA, dns.ClassINET, ids) {
 		return
 	}
 
 	// A TLS connection isn't a DNS request, so the question is composed to
-	// make the server name visible in the query log.  The blocked connections
-	// and the allowed ones get the reasons of the SNI filtering, which tells
-	// them apart from the DNS requests, including the allowed ones.  The rules
-	// found by the filtering engine are kept, so an allowlist hit is still
-	// visible in the details of the entry.
+	// make the server name visible in the query log.  Only actually blocked
+	// connections receive FilteredSNI + IsFiltered=true; rule matches that
+	// were actually allowed (such as while protection is paused) are recorded as
+	// NotFilteredSNI + PredictedBlocked=true so they never mix into real blocks.
+	effectiveBlock := actuallyBlocked && res.IsFiltered
+	predictedBlock := !effectiveBlock && res.IsFiltered
 	logRes := &filtering.Result{
 		Rules:      res.Rules,
 		Reason:     filtering.NotFilteredSNI,
-		IsFiltered: res.IsFiltered,
+		IsFiltered: effectiveBlock,
 	}
-	if res.IsFiltered {
+	if effectiveBlock {
 		logRes.Reason = filtering.FilteredSNI
 	}
 
@@ -819,10 +842,11 @@ func (f *Filter) logConnection(p *packet, host string, res *filtering.Result) {
 	}
 
 	f.queryLog.Add(&querylog.AddParams{
-		Question: req,
-		Result:   logRes,
-		Dst:      dst,
-		ClientIP: p.src.Addr().AsSlice(),
+		Question:         req,
+		Result:           logRes,
+		Dst:              dst,
+		ClientIP:         p.src.Addr().AsSlice(),
+		PredictedBlocked: predictedBlock,
 	})
 
 	f.counters.logged.Add(1)

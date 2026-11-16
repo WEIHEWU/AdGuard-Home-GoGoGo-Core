@@ -121,6 +121,10 @@ type AddParams struct {
 
 	// AuthenticatedData shows if the response had the AD bit set.
 	AuthenticatedData bool
+
+	// PredictedBlocked indicates that filtering rules would have blocked the
+	// connection, but it was actually allowed (e.g. protection paused).
+	PredictedBlocked bool
 }
 
 // validate returns an error if the parameters aren't valid.
@@ -164,7 +168,8 @@ func newQueryLog(conf Config) (l *queryLog, err error) {
 		logger:     conf.Logger,
 		findClient: findClient,
 
-		buffer: container.NewRingBuffer[*logEntry](memSize),
+		buffer:         container.NewRingBuffer[*logEntry](memSize),
+		blockedSummary: newBlockedSummary(blockedSummaryTTL, blockedSummaryMaxEntries),
 
 		conf:    &Config{},
 		confMu:  &sync.RWMutex{},

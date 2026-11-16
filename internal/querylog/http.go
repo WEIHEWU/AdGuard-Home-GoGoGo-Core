@@ -63,6 +63,7 @@ type getConfigResp struct {
 // Register web handlers
 func (l *queryLog) initWeb() {
 	l.conf.HTTPReg.Register(http.MethodGet, "/control/querylog", l.handleQueryLog)
+	l.conf.HTTPReg.Register(http.MethodGet, "/control/querylog/blocked_summary", l.handleBlockedSummary)
 	l.conf.HTTPReg.Register(http.MethodPost, "/control/querylog_clear", l.handleQueryLogClear)
 	l.conf.HTTPReg.Register(http.MethodGet, "/control/querylog/config", l.handleGetQueryLogConfig)
 	l.conf.HTTPReg.Register(

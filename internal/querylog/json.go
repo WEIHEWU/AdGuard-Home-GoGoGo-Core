@@ -81,6 +81,10 @@ func (l *queryLog) entryToJSON(
 		jsonEntry["ecs"] = entry.ReqECS
 	}
 
+	if entry.PredictedBlocked {
+		jsonEntry["predicted_blocked"] = true
+	}
+
 	if len(entry.Result.Rules) > 0 {
 		if r := entry.Result.Rules[0]; len(r.Text) > 0 {
 			jsonEntry["rule"] = r.Text

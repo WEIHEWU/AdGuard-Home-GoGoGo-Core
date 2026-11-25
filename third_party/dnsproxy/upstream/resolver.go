@@ -55,6 +55,9 @@ func NewUpstreamResolver(resolverAddress string, opts *Options) (r *UpstreamReso
 		upsOpts.Timeout = opts.Timeout
 		upsOpts.VerifyServerCertificate = opts.VerifyServerCertificate
 		upsOpts.PreferIPv6 = opts.PreferIPv6
+		upsOpts.HTTPVersions = opts.HTTPVersions
+		upsOpts.RootCAs = opts.RootCAs
+		upsOpts.CipherSuites = opts.CipherSuites
 		upsOpts.Logger = opts.Logger
 	}
 

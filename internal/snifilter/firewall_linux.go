@@ -43,7 +43,11 @@ const (
 	queueCopyRange = 16384
 
 	// queueReadTimeout is the time the queue waits for the packets.
-	queueReadTimeout = 100 * time.Millisecond
+	queueReadTimeout = 2 * time.Second
+
+	// queueSocketBufferSize is the SO_RCVBUF size requested for the netlink
+	// socket to absorb packet bursts without triggering ENOBUFS.
+	queueSocketBufferSize = 1 << 20
 
 	// queueWriteTimeout is the time the queue waits to hand the packet over
 	// to the kernel.
@@ -209,9 +213,13 @@ func signalQueueStopped(fd int) {
 	}
 }
 
-// isRecoverableQueueError reports whether err is a timeout or a temporary
-// netlink error, which must not stop the receive loop.
+// isRecoverableQueueError reports whether err is a timeout, ENOBUFS, or a
+// temporary netlink error, which must not stop the receive loop.
 func isRecoverableQueueError(err error) (ok bool) {
+	if errors.Is(err, unix.ENOBUFS) {
+		return true
+	}
+
 	opErr := &netlink.OpError{}
 
 	return errors.As(err, &opErr) && (opErr.Timeout() || opErr.Temporary())
@@ -243,6 +251,9 @@ func (f *Filter) dialQueue(ctx context.Context, stoppedFD int) (nf *nfqueue.Nfqu
 	nf, err = nfqueue.Open(conf)
 	if err != nil {
 		return nil, err
+	}
+	if nf.Con != nil {
+		_ = nf.Con.SetReadBuffer(queueSocketBufferSize)
 	}
 
 	err = nf.RegisterWithErrorFunc(ctx, func(a nfqueue.Attribute) (ret int) {
@@ -371,11 +382,11 @@ func (f *Filter) watchQueue(ctx context.Context, nf *nfqueue.Nfqueue, stoppedFD 
 	}
 	defer unix.Close(wakeFD)
 
-	go func() {
-		<-ctx.Done()
+	stopWake := startWakeupWriter(ctx, func() {
 		// The value isn't read, it only wakes the wait up.
 		_, _ = unix.Write(wakeFD, eventFDValue)
-	}()
+	})
+	defer stopWake()
 
 	epfd, epErr := unix.EpollCreate1(unix.EPOLL_CLOEXEC)
 	if epErr == nil {
@@ -429,13 +440,49 @@ func (f *Filter) watchQueueLoop(
 		)
 
 		oldStoppedFD := stoppedFD
-		nf, stoppedFD, err = f.reopenQueue(ctx)
-		closeQueueStoppedFD(oldStoppedFD)
+		nf, stoppedFD, err = f.reopenQueueWithBackoff(ctx, oldStoppedFD)
 		if err != nil {
-			f.logger.ErrorContext(ctx, "re-registering the nfqueue", slogutil.KeyError, err)
+			f.logger.DebugContext(ctx, "stopped re-registering nfqueue", slogutil.KeyError, err)
 
 			return
 		}
+	}
+}
+
+// reopenQueueWithBackoff retries [Filter.reopenQueue] with bounded exponential
+// backoff until reopening succeeds or ctx is canceled.
+func (f *Filter) reopenQueueWithBackoff(
+	ctx context.Context,
+	oldStoppedFD int,
+) (nf *nfqueue.Nfqueue, stoppedFD int, err error) {
+	closeQueueStoppedFD(oldStoppedFD)
+
+	backoff := 200 * time.Millisecond
+	const maxBackoff = 5 * time.Second
+
+	for {
+		nf, stoppedFD, err = f.reopenQueue(ctx)
+		if err == nil || ctx.Err() != nil {
+			return nf, stoppedFD, err
+		}
+
+		f.logger.ErrorContext(
+			ctx,
+			"re-registering the nfqueue; retrying",
+			"retry_in", backoff,
+			slogutil.KeyError, err,
+		)
+
+		timer := time.NewTimer(backoff)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+
+			return nil, -1, ctx.Err()
+		case <-timer.C:
+		}
+
+		backoff = min(backoff*2, maxBackoff)
 	}
 }
 
@@ -541,6 +588,18 @@ func queueFD(nf *nfqueue.Nfqueue) (fd int, err error) {
 // handlePacket processes a packet received from the kernel and reports the
 // verdict for it.
 func (f *Filter) handlePacket(nf verdictSetter, a nfqueue.Attribute) (ret int) {
+	defer func() {
+		if v := recover(); v != nil {
+			if f != nil && f.logger != nil {
+				slogutil.PrintRecovered(context.Background(), f.logger, v)
+			}
+			if a.PacketID != nil {
+				_ = nf.SetVerdict(*a.PacketID, nfqueue.NfAccept)
+			}
+			ret = 0
+		}
+	}()
+
 	f.counters.received.Add(1)
 
 	if a.PacketID == nil {

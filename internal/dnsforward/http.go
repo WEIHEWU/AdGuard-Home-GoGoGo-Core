@@ -731,9 +731,12 @@ func (s *Server) handleTestUpstreamDNS(w http.ResponseWriter, r *http.Request) {
 	}
 
 	opts := &upstream.Options{
-		Logger:     aghslog.NewForUpstream(s.baseLogger, aghslog.UpstreamTypeTest),
-		Timeout:    s.conf.UpstreamTimeout,
-		PreferIPv6: s.conf.BootstrapPreferIPv6,
+		Logger:       aghslog.NewForUpstream(s.baseLogger, aghslog.UpstreamTypeTest),
+		Timeout:      s.conf.UpstreamTimeout,
+		HTTPVersions: aghnet.UpstreamHTTPVersions(s.conf.UseHTTP3Upstreams),
+		PreferIPv6:   s.conf.BootstrapPreferIPv6,
+		RootCAs:      s.rootCAs(),
+		CipherSuites: s.conf.TLSCiphers,
 	}
 
 	var boots []*upstream.UpstreamResolver

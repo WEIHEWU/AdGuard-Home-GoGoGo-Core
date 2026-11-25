@@ -1,6 +1,7 @@
 package client
 
 import (
+	"crypto/x509"
 	"fmt"
 	"log/slog"
 	"slices"
@@ -20,6 +21,7 @@ import (
 // configurations.
 type CommonUpstreamConfig struct {
 	Bootstrap               upstream.Resolver
+	RootCAs                 *x509.CertPool
 	UpstreamTimeout         time.Duration
 	BootstrapPreferIPv6     bool
 	EDNSClientSubnetEnabled bool
@@ -221,6 +223,7 @@ func newCustomUpstreamConfig(
 		&upstream.Options{
 			Logger:       cliLogger,
 			Bootstrap:    conf.Bootstrap,
+			RootCAs:      conf.RootCAs,
 			Timeout:      conf.UpstreamTimeout,
 			HTTPVersions: aghnet.UpstreamHTTPVersions(conf.UseHTTP3Upstreams),
 			PreferIPv6:   conf.BootstrapPreferIPv6,

@@ -163,6 +163,14 @@ func TestIsRecoverableQueueError(t *testing.T) {
 		name: "netlink_permanent",
 		err:  &netlink.OpError{Op: "receive", Err: errors.New("permanent")},
 		want: false,
+	}, {
+		name: "enobufs",
+		err:  fmt.Errorf("receiving: %w", unix.ENOBUFS),
+		want: true,
+	}, {
+		name: "netlink_enobufs",
+		err:  &netlink.OpError{Op: "receive", Err: unix.ENOBUFS},
+		want: true,
 	}}
 
 	for _, tc := range testCases {
@@ -235,4 +243,25 @@ func TestWaitQueueEventQueueClosed(t *testing.T) {
 		t,
 		waitQueueEvent(context.Background(), epfd, int(queueRead.Fd()), wakeFD, -1),
 	)
+}
+
+func TestFilter_handlePacket_panicSafe(t *testing.T) {
+	t.Parallel()
+
+	id := uint32(99)
+	payload := []byte{0x45, 0x00, 0x00, 0x28}
+	setter := &testVerdictSetter{}
+
+	// Nil Filter forces a panic inside handlePacket when accessing counters,
+	// verifying that deferred recovery accepts the packet rather than crashing.
+	var nilFilter *Filter
+	assert.NotPanics(t, func() {
+		ret := nilFilter.handlePacket(setter, nfqueue.Attribute{
+			PacketID: &id,
+			Payload:  &payload,
+		})
+		assert.Equal(t, 0, ret)
+	})
+	assert.Equal(t, 1, setter.calls)
+	assert.Equal(t, nfqueue.NfAccept, setter.verdict)
 }

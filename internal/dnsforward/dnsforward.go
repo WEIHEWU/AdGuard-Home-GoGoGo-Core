@@ -4,6 +4,7 @@ package dnsforward
 import (
 	"cmp"
 	"context"
+	"crypto/x509"
 	"fmt"
 	"io"
 	"log/slog"
@@ -523,6 +524,7 @@ func (s *Server) prepareUpstreamSettings(ctx context.Context, boot upstream.Reso
 	s.conf.UpstreamConfig = uc
 	s.conf.ClientsContainer.UpdateCommonUpstreamConfig(&client.CommonUpstreamConfig{
 		Bootstrap:               boot,
+		RootCAs:                 s.rootCAs(),
 		UpstreamTimeout:         s.conf.UpstreamTimeout,
 		BootstrapPreferIPv6:     s.conf.BootstrapPreferIPv6,
 		EDNSClientSubnetEnabled: s.conf.EDNSClientSubnet.Enabled,
@@ -530,6 +532,15 @@ func (s *Server) prepareUpstreamSettings(ctx context.Context, boot upstream.Reso
 	})
 
 	return nil
+}
+
+// rootCAs returns the configured root CA pool, or nil if tlsManager is unset.
+func (s *Server) rootCAs() (roots *x509.CertPool) {
+	if s.tlsManager == nil {
+		return nil
+	}
+
+	return s.tlsManager.RootCAs()
 }
 
 // PrivateRDNSError is returned when the private rDNS upstreams are
@@ -604,6 +615,8 @@ func (s *Server) prepareInternalDNS(ctx context.Context) (err error) {
 		Logger:       aghslog.NewForUpstream(s.baseLogger, aghslog.UpstreamTypeBootstrap),
 		Timeout:      DefaultTimeout,
 		HTTPVersions: aghnet.UpstreamHTTPVersions(s.conf.UseHTTP3Upstreams),
+		RootCAs:      s.rootCAs(),
+		CipherSuites: s.conf.TLSCiphers,
 	}
 
 	s.bootstrap, s.bootResolvers, err = newBootstrap(s.conf.BootstrapDNS, s.etcHosts, bootOpts)
@@ -640,11 +653,13 @@ func (s *Server) setupFallbackDNS() (uc *proxy.UpstreamConfig, err error) {
 	}
 
 	uc, err = proxy.ParseUpstreamsConfig(fallbacks, &upstream.Options{
-		Logger: aghslog.NewForUpstream(s.baseLogger, aghslog.UpstreamTypeFallback),
-		// TODO(s.chzhen):  Investigate if other options are needed.
-		Timeout:    s.conf.UpstreamTimeout,
-		PreferIPv6: s.conf.BootstrapPreferIPv6,
-		// TODO(e.burkov):  Use bootstrap.
+		Logger:       aghslog.NewForUpstream(s.baseLogger, aghslog.UpstreamTypeFallback),
+		Bootstrap:    s.bootstrap,
+		Timeout:      s.conf.UpstreamTimeout,
+		HTTPVersions: aghnet.UpstreamHTTPVersions(s.conf.UseHTTP3Upstreams),
+		PreferIPv6:   s.conf.BootstrapPreferIPv6,
+		RootCAs:      s.rootCAs(),
+		CipherSuites: s.conf.TLSCiphers,
 	})
 	if err != nil {
 		// Do not wrap the error because it's informative enough as is.

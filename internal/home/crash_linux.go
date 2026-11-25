@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"os"
 	"runtime/debug"
+	"sync"
 
 	"github.com/AdguardTeam/golibs/errors"
 	"github.com/AdguardTeam/golibs/logutil/slogutil"
@@ -17,12 +18,10 @@ import (
 )
 
 // crashLogMaxSize is the size in bytes that the crash log must reach to be
-// rotated into the backup file on the next start.  The stack of a panic is only
-// a few tens of kilobytes, so 8 MiB leaves plenty of room for the breadcrumbs
-// and the mirrored warnings, while the file and its backup take at most 16 MiB
-// together.  That matters on Android, where the crash log lives in /data, the
-// space of which is scarce.
-const crashLogMaxSize = 8 * 1024 * 1024
+// rotated into the backup file on start or during runtime log mirroring,
+// keeping the active crash log and its backup within ~1 MiB combined on
+// Android flash storage across weeks of soft reboots.
+const crashLogMaxSize = 512 * 1024
 
 // crashLogBackupSuffix is appended to the crash log path on rotation.
 const crashLogBackupSuffix = ".1"
@@ -35,10 +34,46 @@ const stderrFD = 2
 // being closed when the redirection is installed: an [*os.File] that becomes
 // unreachable is closed by a finalizer, and a close racing with the writes the
 // runtime performs while panicking is exactly what a crash log must not do.
-var crashLogFile *os.File
+var (
+	crashLogFile *os.File
+	crashLogPath string
+)
 
-// crashLogWriter returns the crash log file the logger mirrors the warnings
-// into, or nil if the crash log has not been set up.  It is used by
+// boundedCrashLogWriter bounds mirrored runtime Warn/Error writes so long-lived
+// Android processes surviving multiple soft reboots never grow crash.log
+// unboundedly on flash.
+type boundedCrashLogWriter struct {
+	mu       sync.Mutex
+	f        *os.File
+	path     string
+	maxBytes int64
+}
+
+// Write implements [io.Writer].
+func (w *boundedCrashLogWriter) Write(p []byte) (n int, err error) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+
+	if w.f == nil {
+		return 0, os.ErrInvalid
+	}
+
+	if w.maxBytes > 0 {
+		if fi, statErr := w.f.Stat(); statErr == nil && fi.Size()+int64(len(p)) > w.maxBytes {
+			if w.path != "" {
+				if data, rErr := os.ReadFile(w.path); rErr == nil {
+					_ = os.WriteFile(w.path+crashLogBackupSuffix, data, 0o600)
+				}
+			}
+			_ = w.f.Truncate(0)
+		}
+	}
+
+	return w.f.Write(p)
+}
+
+// crashLogWriter returns the bounded crash log writer the logger mirrors the
+// warnings into, or nil if the crash log has not been set up.  It is used by
 // [newSlogLogger], which must not refer to [crashLogFile] directly, since that
 // variable only exists on Linux.
 func crashLogWriter() (w io.Writer) {
@@ -46,7 +81,11 @@ func crashLogWriter() (w io.Writer) {
 		return nil
 	}
 
-	return crashLogFile
+	return &boundedCrashLogWriter{
+		f:        crashLogFile,
+		path:     crashLogPath,
+		maxBytes: crashLogMaxSize,
+	}
 }
 
 // crashLogUID returns the user ID of the process, which tells whether AdGuard
@@ -126,6 +165,7 @@ func redirectStderrToCrashLog(
 	// Store the file before anything else may fail, so that it never becomes
 	// unreachable, see the docs for [crashLogFile].
 	crashLogFile = f
+	crashLogPath = path
 
 	err = writeCrashLogHeader(f, workDir)
 	if err != nil {

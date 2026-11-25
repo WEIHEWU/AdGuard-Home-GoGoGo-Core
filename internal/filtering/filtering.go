@@ -1061,8 +1061,16 @@ func (d *DNSFilter) updatesLoop(ctx context.Context) {
 func (d *DNSFilter) periodicallyRefreshFilters(ivl time.Duration) (nextIvl time.Duration) {
 	const maxInterval = time.Hour
 
-	if d.conf.FiltersUpdateIntervalHours == 0 {
-		return ivl
+	if d.conf.filtersMu != nil {
+		d.conf.filtersMu.RLock()
+	}
+	updIvlHours := d.conf.FiltersUpdateIntervalHours
+	if d.conf.filtersMu != nil {
+		d.conf.filtersMu.RUnlock()
+	}
+
+	if updIvlHours == 0 {
+		return maxInterval
 	}
 
 	isNetErr, ok := false, false

@@ -3,8 +3,6 @@
 package main
 
 import (
-	"os"
-	"runtime/debug"
 	"testing/fstest"
 
 	"github.com/AdguardTeam/AdGuardHome/internal/aghos"
@@ -21,13 +19,6 @@ var minimalClientFS = fstest.MapFS{
 }
 
 func main() {
-	if os.Getenv("GOGC") == "" {
-		debug.SetGCPercent(50)
-	}
-	if os.Getenv("GOMEMLIMIT") == "" {
-		debug.SetMemoryLimit(64 << 20)
-	}
-
 	aghos.InitAndroidTZ()
 	home.Main(minimalClientFS)
 }

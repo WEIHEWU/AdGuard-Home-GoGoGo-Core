@@ -3,7 +3,7 @@
 # AdGuard-Home-GoGoGo-Core Dedicated Android ARM64 Build Script
 #
 # Default Profile (Full-Strength DNS + NFQUEUE SNI Slim Firewall):
-#   GOOS=linux GOARCH=arm64 GOARM64=v8.2 CGO_ENABLED=0
+#   GOOS=linux GOARCH=arm64 GOARM64=v8.0 CGO_ENABLED=0
 #   -tags="android_slim"
 #   -trimpath -buildvcs=false -ldflags="-s -w -buildid= ..."
 
@@ -70,7 +70,7 @@ CGO_ENABLED='0'
 export GOOS GOARCH CGO_ENABLED
 
 if [ "$GOARCH" = 'arm64' ]; then
-	GOARM64="${GOARM64:-v8.2}"
+	GOARM64="${GOARM64:-v8.0}"
 	export GOARM64
 fi
 

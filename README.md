@@ -15,7 +15,7 @@
 | **前端静态资源包** | 内嵌 SolidJS `client_v2`（约 `6 MB`） | **轻量内存引导页（由原生 Flutter Manager 接管）** | 零冗余静态资产驻留 |
 | **NFQUEUE SNI 首包阻断** | 默认队列 `7` | **原生内置 NFQUEUE `0` + TLS `ClientHello` 分片重组阻断** | 精准掐灭 HTTPDNS / 硬编码 IP 直连广告 |
 | **时区与根证书适配** | 嵌入 `408 KB` `time/tzdata`、缺失 Conscrypt 路径 | **直读 Android Bionic `/apex/com.android.tzdata` 与 Conscrypt CA** | 原生兼容 Android 9 ~ 16+ |
-| **指令集与链接参数** | 默认 ARMv8.0 | **`GOARM64=v8.2` LSE 硬件原子指令 + 纯静态链接** | 高并发锁与原子计数开销显著降低 |
+| **指令集与链接参数** | 默认 ARMv8.0 | **`GOARM64=v8.0` 全芯片兼容（内置运行时 `hwcap` LSE 动态加速）+ 纯静态链接** | `100%` 兼容 ARMv8.0 ~ ARMv9 全系 64 位设备，新芯片自动启用 LSE 硬件原子指令 |
 
 ### 已安全剥离的冗余模块与重型依赖
 通过正交编译标签 `android_slim`（以及可选 `nosni`）按需裁剪，**不改动任何 YAML 配置结构（`schema_version: 34`）与 `/control/*` HTTP API 契约**：
@@ -33,10 +33,10 @@
 环境要求：**Go `1.27+`**（无需安装 Node.js / npm）。
 
 ```sh
-# 1. 默认构建（推荐）：最强满血档位 — DNS + NFQUEUE SNI 双引擎瘦身版（android_slim + GOARM64=v8.2）
+# 1. 默认构建（推荐）：最强满血档位 — DNS + NFQUEUE SNI 双引擎瘦身版（android_slim + GOARM64=v8.0）
 make go-build-android
 
-# 2. 可选构建：极简纯 DNS 防火墙档位（android_slim,nosni + GOARM64=v8.2）
+# 2. 可选构建：极简纯 DNS 防火墙档位（android_slim,nosni + GOARM64=v8.0）
 make go-build-android-nosni
 
 # 3. 跨架构静态类型与构建标签完整性检查
